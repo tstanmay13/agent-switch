@@ -109,6 +109,23 @@ class SwitchTests(unittest.TestCase):
         self.assertIn('+after', snapshot['patch'])
         self.assertIn('tracked.txt', snapshot['diff'])
 
+    def test_parent_directory_lists_and_resolves_one_pairing(self):
+        a.initialize(self.repo, self.cid, self.xid)
+        self.assertEqual([repo for repo, _ in a.find_pairings(self.root)], [self.repo.resolve()])
+        with patch.object(a, 'known_pairings', return_value=a.find_pairings(self.root)):
+            self.assertEqual(a.resolve_repo(self.root), self.repo.resolve())
+            self.assertEqual(a.resolve_repo(self.root, explicit=True), self.root.resolve())
+            with patch('builtins.print') as printed:
+                a.list_pairings(self.root)
+            self.assertTrue(printed.called)
+
+    def test_parent_directory_requires_selection_for_multiple_pairings(self):
+        second = self.root / 'second'; second.mkdir()
+        other = (second, {'repo': str(second), 'agents': {}})
+        with patch.object(a, 'known_pairings', return_value=[(self.repo, {}), other]):
+            with self.assertRaisesRegex(RuntimeError, 'Multiple paired repositories'):
+                a.resolve_repo(self.root)
+
     def test_codex_tool_shape(self):
         e = a.parse_codex({'type':'response_item','payload':{'type':'function_call','name':'exec_command','arguments':'{"cmd":"pytest -q"}'}})
         self.assertEqual(e[0]['text'], 'pytest -q')

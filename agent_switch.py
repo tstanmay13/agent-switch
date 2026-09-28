@@ -402,10 +402,62 @@ def launch(repo, target, dry_run=False, print_mode=False, queue=False):
                 save_state(repo, state)
 
 
+def find_pairings(directory):
+    """Find local pairings in a workspace's immediate child repositories."""
+    directory = Path(directory).resolve()
+    candidates = [directory]
+    if directory.is_dir():
+        candidates.extend(p for p in directory.iterdir() if p.is_dir() and not p.name.startswith('.'))
+    found = []
+    for repo in candidates:
+        state = load(state_dir(repo) / 'state.json')
+        if state and state.get('repo') == str(repo):
+            found.append((repo, state))
+    return found
+
+
+def known_pairings(directory):
+    personal = Path.home() / 'Documents/personal'
+    locations = [Path(directory).resolve()]
+    if personal not in locations:
+        locations.append(personal)
+    found = {}
+    for location in locations:
+        for repo, state in find_pairings(location):
+            found[repo] = state
+    return sorted(found.items(), key=lambda item: str(item[0]))
+
+
+def resolve_repo(directory, explicit=False):
+    directory = Path(directory).resolve()
+    if explicit or (state_dir(directory) / 'state.json').exists() or (directory / '.git').exists():
+        return directory
+    pairings = known_pairings(directory)
+    if len(pairings) == 1:
+        print(f'Using pairing in {pairings[0][0]}')
+        return pairings[0][0]
+    if len(pairings) > 1:
+        choices = '\n'.join(f'  {repo}' for repo, _ in pairings)
+        raise RuntimeError(f'Multiple paired repositories found. Choose one with --repo PATH:\n{choices}')
+    return directory
+
+
+def list_pairings(directory):
+    pairings = known_pairings(directory)
+    if not pairings:
+        print('No paired repositories found. Run agent-switch pair inside a project repository.')
+        return
+    for repo, state in pairings:
+        agents = state.get('agents', {})
+        claude = agents.get('claude', {}).get('id', '-')
+        codex = agents.get('codex', {}).get('id', '-')
+        print(f'{repo}\n  Claude: {claude}\n  Codex:  {codex}\n  Last:   {state.get("last_active", "unknown")}')
+
+
 def status(repo):
     state = load(state_dir(repo) / 'state.json')
     if not state:
-        print(f'No pairing in {repo}. Run agent-switch pair --claude-id ID --codex-id ID')
+        print(f'No pairing in {repo}. Run agent-switch list to see known pairings, or pair --claude-id ID --codex-id ID in this repository.')
         return
     for source in ('claude', 'codex'):
         e = state['agents'].get(source, {})
@@ -425,6 +477,7 @@ def main(argv=None):
     pair.add_argument('--codex-id')
     sub.add_parser('sync')
     sub.add_parser('status')
+    sub.add_parser('list', help='show paired repositories')
     sub.add_parser('doctor')
     sub.add_parser('test', help='run offline integration tests (no API calls)')
     for name in ('claude', 'codex'):
@@ -437,6 +490,11 @@ def main(argv=None):
     args = p.parse_args(argv)
     repo = args.repo.resolve()
     try:
+        if args.command == 'list':
+            list_pairings(repo)
+            return 0
+        if args.command in ('status', 'sync', 'claude', 'codex'):
+            repo = resolve_repo(repo, explicit='--repo' in (argv if argv is not None else sys.argv[1:]))
         if args.command == 'pair':
             print(json.dumps(initialize(repo, args.claude_id, args.codex_id), indent=2))
         elif args.command == 'sync':
