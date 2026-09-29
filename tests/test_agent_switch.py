@@ -9,6 +9,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import agent_switch as a
+original_roots = a.roots
 
 
 class SwitchTests(unittest.TestCase):
@@ -118,6 +119,18 @@ class SwitchTests(unittest.TestCase):
             with patch('builtins.print') as printed:
                 a.list_pairings(self.root)
             self.assertTrue(printed.called)
+
+    def test_pairings_are_scoped_to_current_workspace(self):
+        a.initialize(self.repo, self.cid, self.xid)
+        other_workspace = self.root / 'other-workspace'
+        other_workspace.mkdir()
+        self.assertEqual(a.known_pairings(self.root)[0][0], self.repo.resolve())
+        self.assertEqual(a.known_pairings(other_workspace), [])
+
+    def test_claude_transcripts_follow_config_dir(self):
+        custom = self.root / 'custom-claude'
+        with patch.dict(os.environ, {'CLAUDE_CONFIG_DIR': str(custom)}):
+            self.assertEqual(original_roots('claude'), [custom / 'projects'])
 
     def test_parent_directory_requires_selection_for_multiple_pairings(self):
         second = self.root / 'second'; second.mkdir()

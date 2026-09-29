@@ -6,8 +6,6 @@ The command names the **agent you want to continue in**. Switching is manual and
 
 Install from the agent-switch repository with `./install.sh`. In a coding repository, run `agent-switch doctor` to see local sessions and `agent-switch pair --claude-id CLAUDE_ID --codex-id CODEX_ID` to bind the exact two sessions. If only one session matches, a first switch can discover it automatically. If several match, the CLI lists candidates instead of choosing the latest one. Once paired, the saved IDs stay fixed until you explicitly pair different IDs.
 
-This machine already has a landing-site pair. From `~/Documents/personal/tanmay-singh-landing`, use the commands below without pairing again.
-
 ## Day-to-day flows
 
 | You want to... | Run from the coding repository |
@@ -30,19 +28,19 @@ A normal switch syncs both transcripts, reads Git status/diff/recent commits, wr
 
 Session IDs come from native transcript metadata. `agent-switch` reads the paired transcript paths and incremental byte offsets in `.agent-switch/state.json`. New unrelated sessions do not change the pairing. If a transcript disappears or a repository path differs, it errors rather than guessing.
 
-Run from the repository root. From `~/Documents/personal`, a sole known pairing is selected automatically; with multiple pairings, use the global option **before** the command:
+Run from the repository root. From a workspace directory containing one paired repository, that pairing is selected automatically; with multiple pairings, use the global option **before** the command:
 
 ~~~~sh
-agent-switch --repo ~/Documents/personal/tanmay-singh-landing status
-agent-switch --repo ~/Documents/personal/tanmay-singh-landing claude
+agent-switch --repo ~/code/my-project status
+agent-switch --repo ~/code/my-project claude
 ~~~~
 
 `agent-switch sync` updates the ledger but does not inject context. `agent-switch status` does not sync. A dry run generates the latest handoff but does not mark it received.
 
-## First paired session on this machine
+## First paired session
 
 ~~~~sh
-cd ~/Documents/personal/tanmay-singh-landing
+cd ~/code/my-project
 agent-switch list
 agent-switch claude --dry-run
 agent-switch claude
@@ -50,10 +48,11 @@ agent-switch claude
 agent-switch codex
 ~~~~
 
-The personal Claude profile must be logged in for a live Claude resume:
+For a nondefault Claude profile, set `CLAUDE_CONFIG_DIR` for both Claude and `agent-switch`. The profile must be logged in for a live Claude resume:
 
 ~~~~sh
-CLAUDE_CONFIG_DIR="$HOME/.claude-personal" claude auth login
+export CLAUDE_CONFIG_DIR="$HOME/.claude-work"
+claude auth login
 ~~~~
 
 `agent-switch claude --print` is a noninteractive live test that contacts Claude. `agent-switch test` runs offline and contacts neither service.

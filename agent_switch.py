@@ -171,7 +171,7 @@ def roots(source):
     home = Path.home()
     if source == 'codex':
         return [Path(os.environ.get('CODEX_HOME', home / '.codex')) / 'sessions']
-    return [Path(os.environ.get('CLAUDE_CONFIG_DIR', home / '.claude')) / 'projects', home / '.claude-personal/projects', home / '.claude/projects']
+    return [Path(os.environ.get('CLAUDE_CONFIG_DIR', home / '.claude')) / 'projects']
 
 
 def discover(source, repo, session_id=None, allow_parent=False):
@@ -364,8 +364,6 @@ def launch(repo, target, dry_run=False, print_mode=False, queue=False):
     if target == 'claude':
         cmd = [exe] + (['--resume', entry['id']] if entry else []) + (['--print'] if print_mode else []) + [prompt]
         env = os.environ.copy()
-        if not env.get('CLAUDE_CONFIG_DIR') and str(Path(repo).resolve()).startswith(str(Path.home() / 'Documents/personal')):
-            env['CLAUDE_CONFIG_DIR'] = str(Path.home() / '.claude-personal')
     else:
         cmd = [exe] + (['resume', entry['id']] if entry else []) + [prompt]
         env = os.environ.copy()
@@ -417,15 +415,7 @@ def find_pairings(directory):
 
 
 def known_pairings(directory):
-    personal = Path.home() / 'Documents/personal'
-    locations = [Path(directory).resolve()]
-    if personal not in locations:
-        locations.append(personal)
-    found = {}
-    for location in locations:
-        for repo, state in find_pairings(location):
-            found[repo] = state
-    return sorted(found.items(), key=lambda item: str(item[0]))
+    return sorted(find_pairings(directory), key=lambda item: str(item[0]))
 
 
 def resolve_repo(directory, explicit=False):
