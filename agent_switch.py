@@ -23,7 +23,7 @@ def atomic(path, content):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix='.' + path.name, dir=path.parent)
     try:
-        with os.fdopen(fd, 'w') as f:
+        with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
@@ -35,7 +35,7 @@ def atomic(path, content):
 
 def load(path, default=None):
     try:
-        return json.loads(Path(path).read_text())
+        return json.loads(Path(path).read_text(encoding='utf-8'))
     except FileNotFoundError:
         return default
 
@@ -206,7 +206,7 @@ def choose(source, repo, session_id=None, allow_parent=False):
 
 
 def git(repo, *args):
-    r = subprocess.run(['git', '-C', str(repo), *args], capture_output=True, text=True)
+    r = subprocess.run(['git', '-C', str(repo), *args], capture_output=True, text=True, encoding='utf-8', errors='replace')
     return r.stdout.strip() if r.returncode == 0 else ''
 
 
@@ -225,7 +225,7 @@ def read_ledger(path):
 
 def append_events(path, events):
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, 'a') as f:
+    with open(path, 'a', encoding='utf-8', newline='\n') as f:
         for e in events:
             f.write(json.dumps(e, ensure_ascii=False) + '\n')
         f.flush()
@@ -341,6 +341,24 @@ def handoff(repo, target):
     return state, body, len(all_events)
 
 
+def cli_command(target):
+    exe = shutil.which(target)
+    if not exe:
+        raise RuntimeError(f'{target} CLI is not installed or is missing from PATH')
+    if sys.platform == 'win32' and Path(exe).suffix.lower() in ('.cmd', '.bat'):
+        # npm's batch wrappers cannot safely carry arbitrary multiline prompts.
+        # Run their JS entry point directly, keeping every argument literal.
+        shim = Path(exe).read_text(encoding='utf-8')
+        for relative in re.findall(r'%dp0%[\\/]([^"\r\n]+\.(?:js|cjs|mjs))"', shim, re.I):
+            script = Path(exe).parent / Path(relative.replace('\\', '/'))
+            node = Path(exe).parent / 'node.exe'
+            node_exe = str(node) if node.exists() else shutil.which('node')
+            if script.is_file() and node_exe:
+                return [node_exe, str(script)]
+        raise RuntimeError(f'Cannot resolve {target} batch launcher; install its native CLI or a standard npm launcher')
+    return [exe]
+
+
 def launch(repo, target, dry_run=False, print_mode=False, queue=False):
     state = load(state_dir(repo) / 'state.json') or initialize(repo)
     source = 'claude' if target == 'codex' else 'codex'
@@ -357,24 +375,22 @@ def launch(repo, target, dry_run=False, print_mode=False, queue=False):
     save_state(repo, state)
     state, body, end = handoff(repo, target)
     entry = state['agents'].get(target)
-    exe = shutil.which(target)
-    if not exe:
-        raise RuntimeError(f'{target} CLI is not installed or is missing from PATH')
     prompt = f'You are continuing work handled by another coding agent while this native session was inactive. Read {state_dir(repo) / "handoff.md"}, inspect the current working tree and git diff, and continue the existing task. The handoff contains only new activity since this session last received context. Do not redo completed work unless inspection shows a problem.\n\n{body}'
     if target == 'claude':
-        cmd = [exe] + (['--resume', entry['id']] if entry else []) + (['--print'] if print_mode else []) + [prompt]
+        cmd = [target] + (['--resume', entry['id']] if entry else []) + (['--print'] if print_mode else []) + [prompt]
         env = os.environ.copy()
     else:
-        cmd = [exe] + (['resume', entry['id']] if entry else []) + [prompt]
+        cmd = [target] + (['resume', entry['id']] if entry else []) + [prompt]
         env = os.environ.copy()
     if queue:
         if target != 'codex' or not entry:
             raise RuntimeError('--queue requires a paired Codex session')
-        cmd = [exe, 'queue', '--thread', entry['id'], '--message', prompt, '-C', str(repo)]
+        cmd = [target, 'queue', '--thread', entry['id'], '--message', prompt, '-C', str(repo)]
     if dry_run:
         print('Command:', ' '.join(cmd[:-1]), '<generated prompt>')
         print('Prompt:\n' + prompt)
         return 0
+    cmd = cli_command(target) + cmd[1:]
     old_size = Path(entry['path']).stat().st_size if entry and Path(entry['path']).exists() else 0
     try:
         rc = subprocess.call(cmd, cwd=repo, env=env)
@@ -498,6 +514,11 @@ def main(argv=None):
             print(f'Repository: {repo} ({"git" if (repo / ".git").exists() else "not a git root"})')
             for source in ('claude', 'codex'):
                 print(f'{source}: {shutil.which(source) or "not installed"}')
+                print('  transcript roots: ' + ', '.join(str(root) for root in roots(source)))
+                base = Path.home() / '.agents' if source == 'codex' else Path(os.environ.get('CLAUDE_CONFIG_DIR', Path.home() / '.claude'))
+                name = 'updated-from-claude' if source == 'codex' else 'updated-from-codex'
+                skill = base / 'skills' / name / 'SKILL.md'
+                print(f'  handoff skill: {skill} ({"installed" if skill.is_file() else "missing; re-run installer"})')
                 for c in discover(source, repo)[:5]:
                     print(f"  {c['id']} {c['path']}")
         else:

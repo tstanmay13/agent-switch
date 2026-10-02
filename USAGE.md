@@ -4,7 +4,14 @@ The command names the **agent you want to continue in**. Switching is manual and
 
 ## Setup once per project
 
-Install from the agent-switch repository with `./install.sh`. In a coding repository, run `agent-switch doctor` to see local sessions and `agent-switch pair --claude-id CLAUDE_ID --codex-id CODEX_ID` to bind the exact two sessions. If only one session matches, a first switch can discover it automatically. If several match, the CLI lists candidates instead of choosing the latest one. Once paired, the saved IDs stay fixed until you explicitly pair different IDs.
+Install Python 3 and Git, then install from the agent-switch repository with `./install.sh` on macOS/Linux. For Windows PowerShell use:
+
+```powershell
+./install.ps1
+agent-switch test
+```
+
+If PowerShell blocks scripts, run `py -3 install.py` instead and add `$HOME\.local\bin` to your user PATH. With no Python launcher, use `python install.py`. Restart terminals and agent sessions. Both handoff skills are included and installed automatically. In a coding repository, run `agent-switch doctor` to see local sessions and `agent-switch pair --claude-id CLAUDE_ID --codex-id CODEX_ID` to bind the exact two sessions. If only one session matches, a first switch can discover it automatically. If several match, the CLI lists candidates instead of choosing the latest one. Once paired, the saved IDs stay fixed until you explicitly pair different IDs.
 
 ## Day-to-day flows
 
@@ -58,3 +65,41 @@ claude auth login
 `agent-switch claude --print` is a noninteractive live test that contacts Claude. `agent-switch test` runs offline and contacts neither service.
 
 Runtime state and handoff text can include private task details; keep `.agent-switch/` ignored by Git. Native Claude and Codex transcript files are read only.
+
+## Windows and missing skills
+
+The installer puts `updated-from-claude/SKILL.md` in `$HOME/.agents/skills`
+for Codex and `updated-from-codex/SKILL.md` in `$HOME/.claude/skills` for
+Claude (or `$env:CLAUDE_CONFIG_DIR/skills` when configured). These are user
+skills available across local projects; simply cloning this repository does
+not install them. Re-run the installer after pulling updates. In a restarted
+Codex session invoke `$updated-from-claude`; in Claude use `/updated-from-codex`.
+The exact names start with **updated**, not **update**.
+
+If the command is missing, run it directly from the clone:
+
+```powershell
+py -3 .\agent_switch.py --help
+py -3 .\agent_switch.py test
+py -3 .\agent_switch.py --repo "C:\code\my-project" doctor
+```
+
+From a coding repository, the installed fallback is
+`py -3 "$HOME/.local/share/agent-switch/agent_switch.py" codex --dry-run`.
+A dry run needs local source transcripts and Git, but does not require the
+receiving CLI or authentication. Live resumes require the receiving CLI in
+PATH. Native executables and standard npm JS launchers are supported on Windows;
+unrecognized batch wrappers report an error.
+
+For a custom Claude profile in PowerShell:
+
+```powershell
+$env:CLAUDE_CONFIG_DIR = "$HOME/.claude-work"
+claude auth login
+```
+
+Run installation and both agents with the same profile. Native Windows and WSL
+use separate homes and transcripts: install and run all three tools within the
+same environment. This tool switches local sessions, not sessions between
+machines. Create a fresh pairing on Windows; do not copy Mac runtime state.
+Keep `.agent-switch/` in each coding repository's `.gitignore`.

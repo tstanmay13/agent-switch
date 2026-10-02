@@ -144,5 +144,39 @@ class SwitchTests(unittest.TestCase):
         self.assertEqual(e[0]['text'], 'pytest -q')
         self.assertEqual(a.parse_claude({'type':'user','message':{'content':[{'type':'tool_result','content':'huge output'}]}}), [])
 
+    def test_dry_run_without_cli_preserves_pending_unicode_handoff(self):
+        self.write(self.cp, [{'type': 'assistant', 'message': {'content': 'Decision: café → 日本語'}}])
+        a.initialize(self.repo, self.cid, self.xid)
+        with patch.object(a.shutil, 'which', return_value=None), patch('builtins.print'):
+            self.assertEqual(a.launch(self.repo, 'codex', dry_run=True), 0)
+        body = (a.state_dir(self.repo) / 'handoff.md').read_text(encoding='utf-8')
+        self.assertIn('café → 日本語', body)
+        self.assertEqual(a.load(a.state_dir(self.repo) / 'state.json')['seen_by']['codex'], 0)
+
+    def test_windows_npm_launcher_bypasses_batch_shell(self):
+        shim = self.root / 'codex.cmd'
+        script = self.root / 'node_modules' / 'codex' / 'bin' / 'codex.js'
+        script.parent.mkdir(parents=True)
+        script.write_text('// entry point')
+        shim.write_text('@"%dp0%\\node_modules\\codex\\bin\\codex.js" %*')
+        with patch.object(a.sys, 'platform', 'win32'), patch.object(a.shutil, 'which', side_effect=[str(shim), 'node.exe']):
+            self.assertEqual(a.cli_command('codex'), ['node.exe', str(script)])
+        shim.write_text('@echo custom wrapper')
+        with patch.object(a.sys, 'platform', 'win32'), patch.object(a.shutil, 'which', return_value=str(shim)):
+            with self.assertRaisesRegex(RuntimeError, 'Cannot resolve'):
+                a.cli_command('codex')
+
+    def test_installed_command_and_skills_work_outside_clone(self):
+        import install
+        home = self.root / 'home with spaces'
+        with patch.dict(os.environ, {'CLAUDE_CONFIG_DIR': str(home / 'custom-claude')}), patch('builtins.print'):
+            command = install.install(home)
+            install.install(home)  # upgrades are repeatable
+        self.assertTrue((home / '.agents/skills/updated-from-claude/SKILL.md').is_file())
+        self.assertTrue((home / 'custom-claude/skills/updated-from-codex/SKILL.md').is_file())
+        result = subprocess.run([str(command), '--help'], cwd=self.repo, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('associate existing native sessions', result.stdout)
+
 if __name__ == '__main__':
     unittest.main()
