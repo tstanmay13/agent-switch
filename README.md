@@ -20,3 +20,5 @@ for Codex in `~/.agents/skills`, and `updated-from-codex` for Claude in
 pulling updates. Native Windows and WSL are separate installations; keep both
 agents and agent-switch in the same environment. Pair sessions on each machine;
 local transcript IDs and `.agent-switch/` state are not portable.
+
+The installer replaces an existing linked skill directory with an installed copy so it never writes through a symlink into another source checkout. Source changes belong in this repository.

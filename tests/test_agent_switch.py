@@ -178,5 +178,23 @@ class SwitchTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('associate existing native sessions', result.stdout)
 
+    def test_install_replaces_skill_symlink_without_modifying_source(self):
+        import install
+        home = self.root / 'linked-home'
+        external = self.root / 'other-source'
+        external.mkdir()
+        original = external / 'SKILL.md'
+        original.write_text('Do not overwrite this source')
+        base = home / '.agents/skills'
+        base.mkdir(parents=True)
+        linked = base / 'updated-from-claude'
+        linked.symlink_to(external, target_is_directory=True)
+        with patch.dict(os.environ, {'CLAUDE_CONFIG_DIR': str(home / 'claude')}), patch('builtins.print'):
+            install.install(home)
+            install.install(home)
+        self.assertEqual(original.read_text(), 'Do not overwrite this source')
+        self.assertFalse(linked.is_symlink())
+        self.assertEqual((linked / 'SKILL.md').read_text(), (Path(install.__file__).parent / 'skills/updated-from-claude/SKILL.md').read_text())
+
 if __name__ == '__main__':
     unittest.main()

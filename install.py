@@ -37,7 +37,12 @@ def install(home=None):
     ]
     for name, base in destinations:
         destination = base / name / 'SKILL.md'
+        # Replace a linked skill directory, rather than overwriting its source checkout.
+        if destination.parent.is_symlink():
+            destination.parent.unlink()
         destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.is_symlink():
+            destination.unlink()
         shutil.copy2(source / 'skills' / name / 'SKILL.md', destination)
         print(f'Installed skill: {destination}')
     print(f'Installed command: {command}')
